@@ -751,6 +751,37 @@ class panoptoblock_lti_utility {
     }
 
     /**
+     * Ensure the user is logged in, or perform a cross-site repost if cookies were blocked.
+     *
+     * Mirrors mod/lti/contentitem_return.php behaviour for SameSite compatibility when
+     * external tools POST back to Moodle without the session cookie.
+     *
+     * @param int|null $courseid If set, require_login() is called for this course after authentication.
+     * @param context|null $repostcontext Context for the repost page; system context if null.
+     */
+    public static function require_login_or_repost(?int $courseid = null, ?context $repostcontext = null): void {
+        global $PAGE, $_POST;
+
+        if (!empty($_POST['repost'])) {
+            unset($_POST['repost']);
+        } else if (!isloggedin()) {
+            header_remove('Set-Cookie');
+            $PAGE->set_pagelayout('popup');
+            $PAGE->set_context($repostcontext ?? context_system::instance());
+            $output = $PAGE->get_renderer('mod_lti');
+            $page = new \mod_lti\output\repost_crosssite_page($_SERVER['REQUEST_URI'], $_POST);
+            echo $output->header();
+            echo $output->render($page);
+            echo $output->footer();
+            exit;
+        }
+
+        if ($courseid !== null) {
+            require_login($courseid);
+        }
+    }
+
+    /**
      * Returns true or false depending on if the active user is enrolled in a context
      *
      * @param object $targetcontext the context we are checking enrollment for
