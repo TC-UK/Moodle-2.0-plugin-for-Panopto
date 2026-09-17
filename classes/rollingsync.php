@@ -121,6 +121,44 @@ class block_panopto_rollingsync {
     }
 
     /**
+     * Called when course fields are updated.
+     *
+     * @param \core\event\course_updated $event
+     */
+    public static function courseupdated(\core\event\course_updated $event) {
+        if (
+            $event->courseid <= SITEID ||
+            !\panopto_data::is_main_block_configured() ||
+            !\panopto_data::has_minimum_version()
+        ) {
+            return;
+        }
+
+        $updatedfields = isset($event->other['updatedfields'])
+            ? (array) $event->other['updatedfields']
+            : [];
+        if (!array_key_exists('visible', $updatedfields)) {
+            return;
+        }
+
+        $targetvisible = !empty($updatedfields['visible']);
+        if (
+            !\block_panopto\local\course_visibility_policy::should_process_visibility_change(
+                (int) $event->courseid,
+                $targetvisible
+            )
+        ) {
+            return;
+        }
+
+        if ($targetvisible) {
+            \block_panopto\task\sync_course_users::queue_course_shown_sync((int) $event->courseid);
+        } else {
+            \block_panopto\task\sync_course_users::queue_course_hidden_sync((int) $event->courseid);
+        }
+    }
+
+    /**
      * Called when a course has been deleted.
      *
      * @param \core\event\course_deleted $event
@@ -274,6 +312,30 @@ class block_panopto_rollingsync {
     }
 
     /**
+     * Called when a user has been enrolled.
+     *
+     * @param \core\event\user_enrolment_created $event
+     */
+    public static function userenrolmentcreated(\core\event\user_enrolment_created $event) {
+        if (
+            !\panopto_data::is_main_block_configured() ||
+            !\panopto_data::has_minimum_version()
+        ) {
+            return;
+        }
+
+        $synconenrolment = !empty(get_config('block_panopto', 'sync_on_enrolment'));
+        $syncallhidden = self::course_is_hidden((int) $event->courseid)
+            && \block_panopto\local\course_visibility_policy::all_hidden_participants_enabled(
+                (int) $event->courseid
+            );
+
+        if ($synconenrolment || $syncallhidden) {
+            self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
+        }
+    }
+
+    /**
      * Called when a user has been unenrolled.
      *
      * @param \core\event\user_enrolment_deleted $event
@@ -286,17 +348,7 @@ class block_panopto_rollingsync {
             return;
         }
 
-        $task = new \block_panopto\task\sync_user();
-        $task->set_custom_data([
-            'courseid' => $event->courseid,
-            'userid' => $event->relateduserid,
-        ]);
-
-        if (get_config('block_panopto', 'async_tasks')) {
-            \core\task\manager::queue_adhoc_task($task);
-        } else {
-            $task->execute();
-        }
+        self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
     }
 
     /**
@@ -312,17 +364,7 @@ class block_panopto_rollingsync {
             return;
         }
 
-        $task = new \block_panopto\task\sync_user();
-        $task->set_custom_data([
-            'courseid' => $event->courseid,
-            'userid' => $event->relateduserid,
-        ]);
-
-        if (get_config('block_panopto', 'async_tasks')) {
-            \core\task\manager::queue_adhoc_task($task);
-        } else {
-            $task->execute();
-        }
+        self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
     }
 
     /**
@@ -338,18 +380,15 @@ class block_panopto_rollingsync {
             return;
         }
 
-        if (get_config('block_panopto', 'sync_on_enrolment')) {
-            $task = new \block_panopto\task\sync_user();
-            $task->set_custom_data([
-                'courseid' => $event->courseid,
-                'userid' => $event->relateduserid,
-            ]);
+        $synconenrolment = !empty(get_config('block_panopto', 'sync_on_enrolment'));
+        $synchiddenrole = self::course_is_hidden((int) $event->courseid)
+            && \block_panopto\local\course_visibility_policy::should_sync_hidden_role(
+                (int) $event->courseid,
+                (int) $event->objectid
+            );
 
-            if (get_config('block_panopto', 'async_tasks')) {
-                \core\task\manager::queue_adhoc_task($task);
-            } else {
-                $task->execute();
-            }
+        if ($synconenrolment || $synchiddenrole) {
+            self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
         }
     }
 
@@ -366,18 +405,15 @@ class block_panopto_rollingsync {
             return;
         }
 
-        if (get_config('block_panopto', 'sync_on_enrolment')) {
-            $task = new \block_panopto\task\sync_user();
-            $task->set_custom_data([
-                'courseid' => $event->courseid,
-                'userid' => $event->relateduserid,
-            ]);
+        $synconenrolment = !empty(get_config('block_panopto', 'sync_on_enrolment'));
+        $synchiddenrole = self::course_is_hidden((int) $event->courseid)
+            && \block_panopto\local\course_visibility_policy::should_sync_hidden_role(
+                (int) $event->courseid,
+                (int) $event->objectid
+            );
 
-            if (get_config('block_panopto', 'async_tasks')) {
-                \core\task\manager::queue_adhoc_task($task);
-            } else {
-                $task->execute();
-            }
+        if ($synconenrolment || $synchiddenrole) {
+            self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
         }
     }
 
@@ -433,6 +469,43 @@ class block_panopto_rollingsync {
             } else {
                 $task->execute();
             }
+        }
+    }
+
+    /**
+     * Determine whether a Moodle course is hidden.
+     *
+     * @param int $courseid Moodle course ID.
+     * @return bool
+     */
+    private static function course_is_hidden(int $courseid): bool {
+        global $DB;
+
+        if ($courseid <= SITEID) {
+            return false;
+        }
+
+        $visible = $DB->get_field('course', 'visible', ['id' => $courseid], IGNORE_MISSING);
+        return $visible !== false && empty($visible);
+    }
+
+    /**
+     * Run or queue a per-user synchronisation using the existing async setting.
+     *
+     * @param int $courseid Moodle course ID used to select the Panopto server.
+     * @param int $userid Moodle user ID.
+     */
+    private static function process_user_sync(int $courseid, int $userid): void {
+        $task = new \block_panopto\task\sync_user();
+        $task->set_custom_data([
+            'courseid' => $courseid,
+            'userid' => $userid,
+        ]);
+
+        if (get_config('block_panopto', 'async_tasks')) {
+            \core\task\manager::queue_adhoc_task($task, true);
+        } else {
+            $task->execute();
         }
     }
 }

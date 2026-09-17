@@ -29,6 +29,10 @@ $observers = [
         'eventname' => '\core\event\course_created',
         'callback' => 'block_panopto_rollingsync::coursecreated',
     ],
+    [
+        'eventname' => '\core\event\course_updated',
+        'callback' => 'block_panopto_rollingsync::courseupdated',
+    ],
     // Event when a course is imported or backed up.
     [
         'eventname' => '\core\event\course_restored',
@@ -42,6 +46,11 @@ $observers = [
     [
         'eventname' => '\core\event\user_enrolment_deleted',
         'callback' => 'block_panopto_rollingsync::userenrolmentdeleted',
+    ],
+    // User enrolled event.
+    [
+        'eventname' => '\core\event\user_enrolment_created',
+        'callback' => 'block_panopto_rollingsync::userenrolmentcreated',
     ],
     // User unenroled event.
     [

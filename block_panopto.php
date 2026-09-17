@@ -75,33 +75,35 @@ class block_panopto extends block_base {
      * @param bool $nolongerused depcrecated variable
      */
     public function instance_config_save($data, $nolongerused = false) {
+        $courseid = (int) $this->page->course->id;
+        $previoussignature = \block_panopto\local\course_visibility_policy::get_hidden_access_signature($courseid);
 
         // Add roles mapping.
         $publisherroles = (isset($data->publisher)) ? $data->publisher : [];
         $creatorroles = (isset($data->creator)) ? $data->creator : [];
 
         // Get the current role mappings set for the current course from the db.
-        $mappings = \panopto_data::get_course_role_mappings($this->page->course->id);
+        $mappings = \panopto_data::get_course_role_mappings($courseid);
 
         $oldcreators = array_diff($mappings['creator'], $creatorroles);
         $oldpublishers = array_diff($mappings['publisher'], $publisherroles);
 
         // Make sure the old unassigned roles get unset.
         \panopto_data::unset_course_role_permissions(
-            $this->page->course->id,
+            $courseid,
             $oldpublishers,
             $oldcreators
         );
 
         \panopto_data::set_course_role_permissions(
-            $this->page->course->id,
+            $courseid,
             $publisherroles,
             $creatorroles
         );
 
         if (!empty($data->course)) {
             // Only perform this chunk if we are remapping to a new folder.
-            $panoptodata = new \panopto_data($this->page->course->id);
+            $panoptodata = new \panopto_data($courseid);
 
             if (strcasecmp($panoptodata->sessiongroupid, $data->course) != 0) {
                 $oldsessionid = null;
@@ -118,13 +120,39 @@ class block_panopto extends block_base {
                 $provisioneddata = $panoptodata->provision_course($provisioninginfo, false);
                 if (isset($provisioneddata->Id) && !empty($provisioneddata->Id)) {
                     $panoptodata->update_folder_external_id_with_provider();
-                    \panopto_data::set_panopto_course_id($this->page->course->id, $data->course);
+                    \panopto_data::set_panopto_course_id($courseid, $data->course);
                 } else {
                     $panoptodata->sessiongroupid = $oldsessionid;
                     $provisioninginfo = $panoptodata->get_provisioning_info();
                     $provisioneddata = $panoptodata->provision_course($provisioninginfo, false);
                 }
             }
+        }
+
+        // Preserve instance configuration that is not present while site administration hides course overrides.
+        $config = isset($this->config) && is_object($this->config) ? clone $this->config : new stdClass();
+        if (\block_panopto\local\course_visibility_config::course_overrides_allowed()) {
+            foreach (\block_panopto\local\course_visibility_config::get_setting_names() as $settingname) {
+                $property = \block_panopto\local\course_visibility_config::get_instance_property($settingname);
+                if (property_exists($data, $property)) {
+                    $config->{$property} = \block_panopto\local\course_visibility_config::normalise_override(
+                        $data->{$property}
+                    );
+                }
+            }
+        }
+
+        parent::instance_config_save($config, $nolongerused);
+        $this->config = $config;
+        \block_panopto\local\course_visibility_config::reset_cache($courseid);
+
+        $currentsignature = \block_panopto\local\course_visibility_policy::get_hidden_access_signature($courseid);
+        if (
+            $previoussignature !== $currentsignature &&
+            isset($this->page->course->visible) &&
+            empty($this->page->course->visible)
+        ) {
+            \block_panopto\task\sync_course_users::queue_hidden_policy_refresh($courseid);
         }
     }
 

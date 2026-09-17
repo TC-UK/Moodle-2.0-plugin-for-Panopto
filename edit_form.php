@@ -128,6 +128,75 @@ class block_panopto_edit_form extends block_edit_form {
         } else {
             $mform->addElement('static', 'error', '', get_string('block_edit_error', 'block_panopto'));
         }
+
+        if (\block_panopto\local\course_visibility_config::course_overrides_allowed()) {
+            $this->add_course_visibility_settings($mform, (int) $COURSE->id);
+        }
+    }
+
+    /**
+     * Add inheritable course-level visibility synchronisation settings.
+     *
+     * @param MoodleQuickForm $mform Block configuration form.
+     * @param int $courseid Moodle course ID.
+     */
+    private function add_course_visibility_settings(MoodleQuickForm $mform, int $courseid): void {
+        $configclass = \block_panopto\local\course_visibility_config::class;
+        $sitesettings = $configclass::get_site_settings();
+        $overrides = $configclass::get_course_overrides($courseid);
+
+        $mform->addElement(
+            'header',
+            'coursevisibilitysyncconfigheader',
+            get_string('course_visibility_sync_header', 'block_panopto')
+        );
+        $mform->addElement(
+            'static',
+            'coursevisibilitysyncconfigintro',
+            '',
+            get_string('course_visibility_sync_intro', 'block_panopto')
+        );
+
+        foreach ($configclass::get_setting_names() as $settingname) {
+            $fieldname = 'config_' . $configclass::get_instance_property($settingname);
+            $sitedefault = $sitesettings[$settingname]
+                ? get_string('course_visibility_enabled', 'block_panopto')
+                : get_string('course_visibility_disabled', 'block_panopto');
+            $options = [
+                $configclass::INHERIT => get_string('course_visibility_inherit', 'block_panopto', $sitedefault),
+                $configclass::ENABLED => get_string('course_visibility_enabled', 'block_panopto'),
+                $configclass::DISABLED => get_string('course_visibility_disabled', 'block_panopto'),
+            ];
+            $mform->addElement(
+                'select',
+                $fieldname,
+                get_string('block_panopto_' . $settingname, 'block_panopto'),
+                $options
+            );
+            $mform->setDefault($fieldname, $overrides[$settingname]);
+        }
+
+        $masterfield = 'config_' . $configclass::get_instance_property('sync_hidden_courses');
+        $allparticipantsfield = 'config_' . $configclass::get_instance_property('sync_hidden_all_participants');
+        $visiblefield = 'config_' . $configclass::get_instance_property('sync_visible_course_participants');
+        $creatorfield = 'config_' . $configclass::get_instance_property('sync_hidden_creators');
+        $publisherfield = 'config_' . $configclass::get_instance_property('sync_hidden_publishers');
+        foreach ([$allparticipantsfield, $creatorfield, $publisherfield] as $hiddenfield) {
+            $mform->hideIf($hiddenfield, $masterfield, 'eq', $configclass::DISABLED);
+            if (!$sitesettings['sync_hidden_courses']) {
+                $mform->hideIf($hiddenfield, $masterfield, 'eq', $configclass::INHERIT);
+            }
+        }
+
+        foreach ([$visiblefield, $creatorfield, $publisherfield] as $dependentfield) {
+            $mform->hideIf($dependentfield, $allparticipantsfield, 'eq', $configclass::ENABLED);
+        }
+
+        if ($sitesettings['sync_hidden_all_participants']) {
+            foreach ([$visiblefield, $creatorfield, $publisherfield] as $dependentfield) {
+                $mform->hideIf($dependentfield, $allparticipantsfield, 'eq', $configclass::INHERIT);
+            }
+        }
     }
 
     /**

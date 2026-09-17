@@ -1,0 +1,13 @@
+{
+    "name": "panopto/moodle-block-panopto",
+    "description": "Development tooling for the Panopto block for Moodle",
+    "type": "moodle-block",
+    "license": "GPL-3.0-or-later",
+    "require-dev": {
+        "micaherne/phpstan-moodle": "^1.1",
+        "phpstan/phpstan": "^2.1.18"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

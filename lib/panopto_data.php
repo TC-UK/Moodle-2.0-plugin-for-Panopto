@@ -26,7 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 if (empty($CFG)) {
     // @codingStandardsIgnoreLine
-    require_once('../../config.php');
+    require_once(dirname(__FILE__) . '/../../../config.php');
 }
 require_once($CFG->libdir . '/clilib.php');
 require_once($CFG->libdir . '/dmllib.php');
@@ -347,22 +347,32 @@ class panopto_data {
      * @return string
      */
     public static function get_role_from_context($context, $userid) {
-        $role = 'Viewer';
-
-        $canprovisionaspublisher = has_capability('block/panopto:provision_aspublisher', $context, $userid);
-        $canprovisionasteacher = has_capability('block/panopto:provision_asteacher', $context, $userid);
-
-        if ($canprovisionaspublisher) {
-            if ($canprovisionasteacher) {
-                $role = 'Creator/Publisher';
-            } else {
-                $role = 'Publisher';
-            }
-        } else if ($canprovisionasteacher) {
-            $role = 'Creator';
+        $mappings = self::get_course_role_mappings((int) $context->instanceid);
+        $userroleids = [];
+        // Only roles assigned in this course determine Panopto course membership.
+        // System and category roles can grant Moodle administration access, but must not elevate the Panopto course role.
+        foreach (get_user_roles($context, $userid, false) as $userrole) {
+            $userroleids[] = (int) $userrole->roleid;
         }
 
-        return $role;
+        $creatorroleids = array_map('intval', $mappings['creator']);
+        $publisherroleids = array_map('intval', $mappings['publisher']);
+        $iscreator = !empty(array_intersect($userroleids, $creatorroleids));
+        $ispublisher = !empty(array_intersect($userroleids, $publisherroleids));
+
+        if ($iscreator && $ispublisher) {
+            return 'Creator/Publisher';
+        }
+
+        if ($iscreator) {
+            return 'Creator';
+        }
+
+        if ($ispublisher) {
+            return 'Publisher';
+        }
+
+        return 'Viewer';
     }
 
     /**
@@ -490,12 +500,19 @@ class panopto_data {
                     $CFG->version
                 );
 
+                $course = $DB->get_record(
+                    'course',
+                    ['id' => $this->moodlecourseid],
+                    'id, visible',
+                    MUST_EXIST
+                );
                 $coursecontext = context_course::instance($this->moodlecourseid);
-                $enrolledusers = get_enrolled_users($coursecontext);
+                $enrolledusers = get_enrolled_users($coursecontext, '', 0, 'u.*', null, 0, 0, true);
 
                 $courseinfo->viewers = [];
                 $courseinfo->creators = [];
                 $courseinfo->publishers = [];
+                $synceduserids = [];
 
                 // Sync every user enrolled in the course.
                 foreach ($enrolledusers as $enrolleduser) {
@@ -513,30 +530,38 @@ class panopto_data {
                         $courseinfo->viewers[] = $panoptousername;
                     }
 
-                    // Syncs every user enrolled in the course - apply throttling only for bulk operations.
-                    if (get_config('block_panopto', 'sync_after_provisioning')) {
-                        // Check if course is visible before syncing users.
-                        $course = $DB->get_record('course', ['id' => $this->moodlecourseid]);
-                        if ($course && $course->visible) {
-                            if ($isbulkoperation) {
-                                // Apply throttling for bulk operations to prevent 500 errors.
-                                require_once(dirname(__FILE__) . '/panopto_throttling.php');
-                                panopto_throttling::execute_with_throttling(
-                                    [$this, 'sync_external_user'],
-                                    [$enrolleduser->id],
-                                    'usermanagement_sync',
-                                    'sync_external_user_bulk',
-                                    $enrolleduser->id
-                                );
-                            } else {
-                                // Use direct sync for individual operations (original strict behavior).
-                                $this->sync_external_user($enrolleduser->id);
-                            }
+                    $shouldsyncuser = !empty($course->visible)
+                        ? !empty(get_config('block_panopto', 'sync_after_provisioning'))
+                        : \block_panopto\local\course_visibility_policy::should_sync_hidden_course(
+                            (int) $course->id,
+                            (int) $enrolleduser->id
+                        );
+
+                    // Sync selected enrolled users, applying throttling only for bulk operations.
+                    if ($shouldsyncuser) {
+                        if ($isbulkoperation) {
+                            // Apply throttling for bulk operations to prevent 500 errors.
+                            require_once(dirname(__FILE__) . '/panopto_throttling.php');
+                            panopto_throttling::execute_with_throttling(
+                                [$this, 'sync_external_user'],
+                                [$enrolleduser->id],
+                                'usermanagement_sync',
+                                'sync_external_user_bulk',
+                                $enrolleduser->id
+                            );
+                        } else {
+                            // Use direct sync for individual operations (original strict behavior).
+                            $this->sync_external_user($enrolleduser->id);
                         }
+                        $synceduserids[(int) $enrolleduser->id] = true;
                     }
                 }
 
-                if (!$skipusersync && $this->uname !== 'guest') {
+                if (
+                    !$skipusersync &&
+                    $this->uname !== 'guest' &&
+                    !isset($synceduserids[(int) $USER->id])
+                ) {
                     // This is intended to make sure provisioning teachers get access without relogging,
                     // so we only need to perform this if we aren't syncing all enrolled users.
 
@@ -1064,7 +1089,7 @@ class panopto_data {
      * @param int $userid external user id
      */
     public function sync_external_user($userid) {
-        global $DB, $CFG;
+        global $DB;
 
         self::print_log_verbose(get_string('attempt_sync_user', 'block_panopto', $userid));
         self::print_log_verbose(get_string('attempt_sync_user_server', 'block_panopto', $this->servername));
@@ -1074,13 +1099,17 @@ class panopto_data {
 
         // Only sync if we find an existing user with the given id, and if not temp user.
         if (isset($userinfo) && ($userinfo !== false) && !$istempuser) {
-            $instancename = get_config('block_panopto', 'instance_name');
-
-            $currentcourses = enrol_get_users_courses($userid, true);
+            // Apply the plugin's explicit visibility policy rather than Moodle's
+            // view-hidden-courses capability filter.
+            $currentcourses = enrol_get_all_users_courses($userid, true);
 
             // Go through each course.
             $groupstosync = [];
             foreach ($currentcourses as $course) {
+                if (!\block_panopto\local\course_visibility_policy::should_sync_course($course, (int) $userid)) {
+                    continue;
+                }
+
                 $coursecontext = context_course::instance($course->id);
 
                 $coursepanopto = new \panopto_data($course->id);

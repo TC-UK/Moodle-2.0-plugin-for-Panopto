@@ -75,6 +75,10 @@ $string['block_global_unprovision_courses'] = 'Unprovision Panopto folders from 
 $string['block_global_upgrade_all_folders'] = 'Upgrade all existing folders and imports';
 $string['block_panopto_any_creator_can_view_folder_settings'] = 'Allow all Users with Creator Access to View Panopto Folder Settings Links';
 $string['block_panopto_any_creator_can_view_folder_settings_desc'] = 'When selected, any user with a Creator role in the folder can view its settings link. By default, only course instructors can view the course settings link.';
+$string['block_panopto_allow_course_visibility_overrides'] = 'Allow course-level visibility synchronisation settings';
+$string['block_panopto_allow_course_visibility_overrides_desc'] = 'Allow authorised users to override the visibility ' .
+    'synchronisation settings in each Panopto block configuration. When disabled, course-level controls are hidden and ' .
+    'site-wide settings apply. Existing course overrides are retained and become effective again if this option is re-enabled.';
 $string['block_panopto_anyone_view_recorder_links'] = 'Allow All Roles to View Recorder Download Links';
 $string['block_panopto_anyone_view_recorder_links_desc'] = 'When selected, viewers can view the recorder download links. By default, only users with Creator and/or provisioning access on a folder can view the download links.';
 $string['block_panopto_api_throttling_desc'] = 'Configure throttling for Panopto API operations to prevent 500 errors during bulk operations.';
@@ -125,6 +129,11 @@ $string['block_panopto_publisher_mapping'] = 'Publisher role mapping';
 $string['block_panopto_publisher_mapping_desc'] = 'Select which course roles are set as publishers in new Panopto course folders.';
 $string['block_panopto_publisher_system_role_mapping'] = 'System roles with provisioning permissions';
 $string['block_panopto_publisher_system_role_mapping_desc'] = 'Select which system roles can provision new Panopto course folders. Adding roles to this setting may have a performance impact on larger systems.';
+$string['block_panopto_remove_access_on_course_hidden'] = 'Remove access when a course is hidden again';
+$string['block_panopto_remove_access_on_course_hidden_desc'] = 'When a visible Moodle course is hidden again, ' .
+    'asynchronously resynchronise its active participants and remove the Panopto course groups that no longer apply. ' .
+    'This setting is independent of visible-transition synchronisation. Access required by the hidden-course participant, ' .
+    'Creator, or Publisher options is retained.';
 $string['block_panopto_server_number_desc'] = 'Click \'Save Changes\' to update number of servers.';
 $string['block_panopto_server_number_name'] = 'Number of Panopto servers';
 $string['block_panopto_sso_sync_type'] = 'Panopto SSO Sync Behavior';
@@ -133,8 +142,28 @@ $string['block_panopto_sync_after_login'] = 'Authenticate and Sync to Panopto on
 $string['block_panopto_sync_after_login_desc'] = 'When selected, users are authenticated with Panopto and their permissions are synced when logging in to Moodle. Typically, authentication and permission sync will occur when a user accesses Panopto in the course and as such, we only recommend that organizations turn this setting on if they do not place the Panopto block in Moodle (not recommended). Additionally, log-in time will be extended if this option is selected.';
 $string['block_panopto_sync_after_provisioning'] = 'Sync Enrolled Users after Successfully Provisioning (not recommended)';
 $string['block_panopto_sync_after_provisioning_desc'] = 'When selected, all users enrolled in a course that is active and visible will be synchronized after provisioning. Typically, when a user accesses the Panopto block in a course, authentication and permission sync of that course happen. As such, we only recommend that organizations turn this setting on if they do not place the Panopto block in Moodle (not recommended).';
+$string['block_panopto_sync_hidden_all_participants'] = 'Synchronise all participants in hidden courses';
+$string['block_panopto_sync_hidden_all_participants_desc'] = 'Synchronise every actively enrolled participant with Panopto ' .
+    'while the Moodle course is hidden. When selected, the separate Creator, Publisher, and visible-transition ' .
+    'options are not needed.';
+$string['block_panopto_sync_hidden_courses'] = 'Allow role provisioning while Moodle courses are hidden';
+$string['block_panopto_sync_hidden_courses_desc'] = 'Allow selected active participants to retain or receive Panopto ' .
+    'course-group membership while a Moodle course is hidden. Select all participants, Creators, Publishers, or both ' .
+    'role-based options below. Existing per-course role mapping overrides are honoured.';
+$string['block_panopto_sync_hidden_creators'] = 'Synchronise Creators in hidden courses';
+$string['block_panopto_sync_hidden_creators_desc'] = 'Synchronise actively enrolled users whose effective course role ' .
+    'is selected in the Panopto Creator role mapping. This option is available when all-participant synchronisation is ' .
+    'not selected.';
+$string['block_panopto_sync_hidden_publishers'] = 'Synchronise Publishers in hidden courses';
+$string['block_panopto_sync_hidden_publishers_desc'] = 'Synchronise actively enrolled users whose effective course role ' .
+    'is selected in the Panopto Publisher role mapping. This option is available when all-participant synchronisation ' .
+    'is not selected.';
 $string['block_panopto_sync_on_enrolment'] = 'Sync Users after Class Enrolment (optional)';
 $string['block_panopto_sync_on_enrolment_desc'] = 'When selected, the permission when a student is enrolled into a course is synchronized with a valid Panopto folder. When disabled, users will be synced with Panopto when the user views the Panopto block. If you do not intend to use the block in a course, or if a course has embedded Panopto content directly into the course homepage (content will load before the block syncs in this case), this feature can be enabled. Note: Enabling this feature may cause a performance slowdown when enroling users.';
+$string['block_panopto_sync_visible_course_participants'] = 'Synchronise all participants when a course is made visible';
+$string['block_panopto_sync_visible_course_participants_desc'] = 'When a Moodle course is made visible, asynchronously ' .
+    'synchronise every actively enrolled participant with Panopto. Participants are processed in bounded batches by ' .
+    'Moodle cron. This option is unavailable when all hidden-course participants are already synchronised.';
 $string['block_panopto_throttling_debug_logging'] = 'Debug Logging';
 $string['block_panopto_throttling_debug_logging_desc'] = 'Enable detailed logging of throttling operations. WARNING: Useful for troubleshooting but may generate many log entries.';
 $string['block_panopto_wsdl_caching_enabled'] = 'Enable WSDL Caching';
@@ -187,6 +216,14 @@ $string['course_already_provisioned'] = 'This course has already been provisione
 $string['course_has_invalid_panopto_data'] = 'The target Moodle course is no associated with valid Panopto folder data.';
 $string['course_name'] = 'Course name';
 $string['course_settings'] = 'Course settings';
+$string['course_visibility_disabled'] = 'Disabled';
+$string['course_visibility_enabled'] = 'Enabled';
+$string['course_visibility_inherit'] = 'Use site default ({$a})';
+$string['course_visibility_sync_header'] = 'Course visibility synchronisation';
+$string['course_visibility_sync_intro'] = 'Each option inherits the current site-wide value until it is explicitly ' .
+    'enabled or disabled for this course. Site administrators can temporarily disable course-level configuration without ' .
+    'deleting these selections. Saving a change to hidden-course access queues a participant reconciliation when this ' .
+    'course is hidden.';
 $string['creator'] = 'Creator';
 $string['creator_help'] = 'A Creator can create and edit content in Panopto';
 $string['creators'] = 'Creators';

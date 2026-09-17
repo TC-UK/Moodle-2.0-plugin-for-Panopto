@@ -153,6 +153,86 @@ if ($ADMIN->fulltree) {
         )
     );
 
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_panopto/allow_course_visibility_overrides',
+            get_string('block_panopto_allow_course_visibility_overrides', 'block_panopto'),
+            get_string('block_panopto_allow_course_visibility_overrides_desc', 'block_panopto'),
+            0
+        )
+    );
+
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_panopto/sync_hidden_courses',
+            get_string('block_panopto_sync_hidden_courses', 'block_panopto'),
+            get_string('block_panopto_sync_hidden_courses_desc', 'block_panopto'),
+            0
+        )
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_panopto/sync_hidden_all_participants',
+            get_string('block_panopto_sync_hidden_all_participants', 'block_panopto'),
+            get_string('block_panopto_sync_hidden_all_participants_desc', 'block_panopto'),
+            0
+        )
+    );
+    $settings->hide_if(
+        'block_panopto/sync_hidden_all_participants',
+        'block_panopto/sync_hidden_courses',
+        'notchecked'
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_panopto/sync_hidden_creators',
+            get_string('block_panopto_sync_hidden_creators', 'block_panopto'),
+            get_string('block_panopto_sync_hidden_creators_desc', 'block_panopto'),
+            0
+        )
+    );
+    $settings->hide_if('block_panopto/sync_hidden_creators', 'block_panopto/sync_hidden_courses', 'notchecked');
+    $settings->hide_if(
+        'block_panopto/sync_hidden_creators',
+        'block_panopto/sync_hidden_all_participants',
+        'checked'
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_panopto/sync_hidden_publishers',
+            get_string('block_panopto_sync_hidden_publishers', 'block_panopto'),
+            get_string('block_panopto_sync_hidden_publishers_desc', 'block_panopto'),
+            0
+        )
+    );
+    $settings->hide_if('block_panopto/sync_hidden_publishers', 'block_panopto/sync_hidden_courses', 'notchecked');
+    $settings->hide_if(
+        'block_panopto/sync_hidden_publishers',
+        'block_panopto/sync_hidden_all_participants',
+        'checked'
+    );
+
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_panopto/sync_visible_course_participants',
+            get_string('block_panopto_sync_visible_course_participants', 'block_panopto'),
+            get_string('block_panopto_sync_visible_course_participants_desc', 'block_panopto'),
+            0
+        )
+    );
+    $settings->hide_if(
+        'block_panopto/sync_visible_course_participants',
+        'block_panopto/sync_hidden_all_participants',
+        'checked'
+    );
+    $settings->add(
+        new admin_setting_configcheckbox(
+            'block_panopto/remove_access_on_course_hidden',
+            get_string('block_panopto_remove_access_on_course_hidden', 'block_panopto'),
+            get_string('block_panopto_remove_access_on_course_hidden_desc', 'block_panopto'),
+            0
+        )
+    );
     $possiblessosynctypes = \panopto_data::getpossiblessosynctypes();
     $settings->add(
         new admin_setting_configselect(
