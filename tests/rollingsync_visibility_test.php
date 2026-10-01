@@ -50,7 +50,6 @@ final class rollingsync_visibility_test extends \advanced_testcase {
         self::assertCount(1, $tasks);
         $data = $tasks[0]->get_custom_data();
         self::assertSame($course->id, (int) $data->courseid);
-        self::assertTrue((bool) $data->targetvisible);
         self::assertSame(sync_course_users::REASON_COURSE_SHOWN, $data->reason);
         self::assertSame(0, (int) $data->afteruserid);
     }
@@ -74,7 +73,7 @@ final class rollingsync_visibility_test extends \advanced_testcase {
 
         $tasks = \core\task\manager::get_adhoc_tasks(sync_course_users::class);
         self::assertCount(1, $tasks);
-        self::assertFalse((bool) $tasks[0]->get_custom_data()->targetvisible);
+        self::assertSame(sync_course_users::REASON_COURSE_HIDDEN, $tasks[0]->get_custom_data()->reason);
     }
 
     /**

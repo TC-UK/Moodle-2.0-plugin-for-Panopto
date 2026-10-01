@@ -57,7 +57,6 @@ class provider implements
      */
     public static function get_metadata(collection $collection): collection {
         $collection->add_external_location_link('block_panopto', [
-            'username' => 'privacy:metadata:block_panopto:username',
             'firstname' => 'privacy:metadata:block_panopto:firstname',
             'lastname' => 'privacy:metadata:block_panopto:lastname',
             'email' => 'privacy:metadata:block_panopto:email',
@@ -75,9 +74,7 @@ class provider implements
     public static function get_contexts_for_userid(int $userid): \core_privacy\local\request\contextlist {
         $contextlist = new \core_privacy\local\request\contextlist();
 
-        // Hidden provisioned courses can now send user data, so visibility and current enrolment activity
-        // must not hide a context which may still hold previously synchronised data in Panopto.
-        $currentcourses = \enrol_get_all_users_courses($userid, false);
+        $currentcourses = \enrol_get_users_courses($userid, true);
 
         foreach ($currentcourses as $currentcourse) {
             $currentpanopto = new \panopto_data($currentcourse->id);
@@ -144,7 +141,6 @@ class provider implements
                 $subcontext[] = $currentpanopto->servername;
 
                 \core_privacy\local\request\writer::with_context(\context_system::instance())->export_data($subcontext, (object) [
-                    'username' => $userinfo->username,
                     'firstname' => $panoptouser->FirstName,
                     'lastname' => $panoptouser->LastName,
                     'email' => $panoptouser->Email,
@@ -169,6 +165,7 @@ class provider implements
             $currentpanopto->servername = $panoptoserver->name;
             $currentpanopto->applicationkey = $panoptoserver->appkey;
 
+            $userids = [];
             foreach ($targetusers as $targetuser) {
                 // Search for user in panopto, if they exist then export the below data, if they do not exist then skip.
                 $panoptouser = $currentpanopto->get_user_by_key($instancename . '\\' . $targetuser->username);
@@ -236,7 +233,6 @@ class provider implements
         $coursepanopto = new \panopto_data($context->instanceid);
 
         if ($coursepanopto->has_valid_panopto()) {
-            $currentpanopto = $coursepanopto;
             $enrolledusers = \get_enrolled_users($context);
             $instancename = \get_config('block_panopto', 'instance_name');
 

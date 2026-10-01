@@ -407,25 +407,5 @@ function xmldb_block_panopto_upgrade($oldversion = 0) {
         upgrade_block_savepoint(true, 2021063000, 'panopto');
     }
 
-    if ($oldversion < 2026091500) {
-        // The version bump refreshes event observers for course visibility synchronisation.
-        upgrade_block_savepoint(true, 2026091500, 'panopto');
-    }
-
-    if ($oldversion < 2026091600) {
-        // No schema change is required for strict course role-mapping resolution.
-        upgrade_block_savepoint(true, 2026091600, 'panopto');
-    }
-
-    if ($oldversion < 2026091601) {
-        // Course visibility overrides are stored in existing block instance configuration data.
-        upgrade_block_savepoint(true, 2026091601, 'panopto');
-    }
-
-    if ($oldversion < 2026091700) {
-        // No schema change is required for friendly labels and save-triggered hidden policy reconciliation.
-        upgrade_block_savepoint(true, 2026091700, 'panopto');
-    }
-
     return true;
 }

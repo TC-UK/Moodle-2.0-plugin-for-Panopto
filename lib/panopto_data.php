@@ -26,7 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 if (empty($CFG)) {
     // @codingStandardsIgnoreLine
-    require_once(dirname(__FILE__) . '/../../../config.php');
+    require_once('../../config.php');
 }
 require_once($CFG->libdir . '/clilib.php');
 require_once($CFG->libdir . '/dmllib.php');
@@ -512,7 +512,6 @@ class panopto_data {
                 $courseinfo->viewers = [];
                 $courseinfo->creators = [];
                 $courseinfo->publishers = [];
-                $synceduserids = [];
 
                 // Sync every user enrolled in the course.
                 foreach ($enrolledusers as $enrolleduser) {
@@ -553,15 +552,10 @@ class panopto_data {
                             // Use direct sync for individual operations (original strict behavior).
                             $this->sync_external_user($enrolleduser->id);
                         }
-                        $synceduserids[(int) $enrolleduser->id] = true;
                     }
                 }
 
-                if (
-                    !$skipusersync &&
-                    $this->uname !== 'guest' &&
-                    !isset($synceduserids[(int) $USER->id])
-                ) {
+                if (!$skipusersync && $this->uname !== 'guest') {
                     // This is intended to make sure provisioning teachers get access without relogging,
                     // so we only need to perform this if we aren't syncing all enrolled users.
 
@@ -1089,7 +1083,7 @@ class panopto_data {
      * @param int $userid external user id
      */
     public function sync_external_user($userid) {
-        global $DB;
+        global $DB, $CFG;
 
         self::print_log_verbose(get_string('attempt_sync_user', 'block_panopto', $userid));
         self::print_log_verbose(get_string('attempt_sync_user_server', 'block_panopto', $this->servername));
@@ -1099,6 +1093,8 @@ class panopto_data {
 
         // Only sync if we find an existing user with the given id, and if not temp user.
         if (isset($userinfo) && ($userinfo !== false) && !$istempuser) {
+            $instancename = get_config('block_panopto', 'instance_name');
+
             // Apply the plugin's explicit visibility policy rather than Moodle's
             // view-hidden-courses capability filter.
             $currentcourses = enrol_get_all_users_courses($userid, true);

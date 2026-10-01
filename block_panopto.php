@@ -69,7 +69,7 @@ class block_panopto extends block_base {
     }
 
     /**
-     * Save per-instance config in custom table instead of mdl_block_instance configdata column.
+     * Save per-instance role mappings and visibility overrides.
      *
      * @param array $data the data being set on Panopto
      * @param bool $nolongerused depcrecated variable
@@ -83,27 +83,27 @@ class block_panopto extends block_base {
         $creatorroles = (isset($data->creator)) ? $data->creator : [];
 
         // Get the current role mappings set for the current course from the db.
-        $mappings = \panopto_data::get_course_role_mappings($courseid);
+        $mappings = \panopto_data::get_course_role_mappings($this->page->course->id);
 
         $oldcreators = array_diff($mappings['creator'], $creatorroles);
         $oldpublishers = array_diff($mappings['publisher'], $publisherroles);
 
         // Make sure the old unassigned roles get unset.
         \panopto_data::unset_course_role_permissions(
-            $courseid,
+            $this->page->course->id,
             $oldpublishers,
             $oldcreators
         );
 
         \panopto_data::set_course_role_permissions(
-            $courseid,
+            $this->page->course->id,
             $publisherroles,
             $creatorroles
         );
 
         if (!empty($data->course)) {
             // Only perform this chunk if we are remapping to a new folder.
-            $panoptodata = new \panopto_data($courseid);
+            $panoptodata = new \panopto_data($this->page->course->id);
 
             if (strcasecmp($panoptodata->sessiongroupid, $data->course) != 0) {
                 $oldsessionid = null;
@@ -120,7 +120,7 @@ class block_panopto extends block_base {
                 $provisioneddata = $panoptodata->provision_course($provisioninginfo, false);
                 if (isset($provisioneddata->Id) && !empty($provisioneddata->Id)) {
                     $panoptodata->update_folder_external_id_with_provider();
-                    \panopto_data::set_panopto_course_id($courseid, $data->course);
+                    \panopto_data::set_panopto_course_id($this->page->course->id, $data->course);
                 } else {
                     $panoptodata->sessiongroupid = $oldsessionid;
                     $provisioninginfo = $panoptodata->get_provisioning_info();
@@ -152,7 +152,10 @@ class block_panopto extends block_base {
             isset($this->page->course->visible) &&
             empty($this->page->course->visible)
         ) {
-            \block_panopto\task\sync_course_users::queue_hidden_policy_refresh($courseid);
+            \block_panopto\task\sync_course_users::queue_course_sync(
+                $courseid,
+                \block_panopto\task\sync_course_users::REASON_HIDDEN_POLICY
+            );
         }
     }
 

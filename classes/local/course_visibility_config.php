@@ -16,8 +16,6 @@
 
 namespace block_panopto\local;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Resolves site defaults and preserved course-level visibility synchronisation overrides.
  *
@@ -64,7 +62,6 @@ final class course_visibility_config {
      * @return string
      */
     public static function get_instance_property(string $settingname): string {
-        self::validate_setting_name($settingname);
         return 'visibility_' . $settingname;
     }
 
@@ -176,7 +173,6 @@ final class course_visibility_config {
      * @return bool
      */
     public static function is_enabled(int $courseid, string $settingname): bool {
-        self::validate_setting_name($settingname);
         return self::get_effective_settings($courseid)[$settingname];
     }
 
@@ -206,16 +202,5 @@ final class course_visibility_config {
         }
 
         unset(self::$overridecache[$courseid]);
-    }
-
-    /**
-     * Reject programming errors involving an unsupported setting name.
-     *
-     * @param string $settingname Site-wide setting name.
-     */
-    private static function validate_setting_name(string $settingname): void {
-        if (!in_array($settingname, self::SETTING_NAMES, true)) {
-            throw new \coding_exception('Unsupported Panopto course visibility setting: ' . $settingname);
-        }
     }
 }

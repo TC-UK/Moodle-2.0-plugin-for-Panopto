@@ -152,9 +152,15 @@ class block_panopto_rollingsync {
         }
 
         if ($targetvisible) {
-            \block_panopto\task\sync_course_users::queue_course_shown_sync((int) $event->courseid);
+            \block_panopto\task\sync_course_users::queue_course_sync(
+                (int) $event->courseid,
+                \block_panopto\task\sync_course_users::REASON_COURSE_SHOWN
+            );
         } else {
-            \block_panopto\task\sync_course_users::queue_course_hidden_sync((int) $event->courseid);
+            \block_panopto\task\sync_course_users::queue_course_sync(
+                (int) $event->courseid,
+                \block_panopto\task\sync_course_users::REASON_COURSE_HIDDEN
+            );
         }
     }
 
@@ -331,7 +337,17 @@ class block_panopto_rollingsync {
             );
 
         if ($synconenrolment || $syncallhidden) {
-            self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
+            $task = new \block_panopto\task\sync_user();
+            $task->set_custom_data([
+                'courseid' => $event->courseid,
+                'userid' => $event->relateduserid,
+            ]);
+
+            if (get_config('block_panopto', 'async_tasks')) {
+                \core\task\manager::queue_adhoc_task($task);
+            } else {
+                $task->execute();
+            }
         }
     }
 
@@ -348,7 +364,17 @@ class block_panopto_rollingsync {
             return;
         }
 
-        self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
+        $task = new \block_panopto\task\sync_user();
+        $task->set_custom_data([
+            'courseid' => $event->courseid,
+            'userid' => $event->relateduserid,
+        ]);
+
+        if (get_config('block_panopto', 'async_tasks')) {
+            \core\task\manager::queue_adhoc_task($task);
+        } else {
+            $task->execute();
+        }
     }
 
     /**
@@ -364,7 +390,17 @@ class block_panopto_rollingsync {
             return;
         }
 
-        self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
+        $task = new \block_panopto\task\sync_user();
+        $task->set_custom_data([
+            'courseid' => $event->courseid,
+            'userid' => $event->relateduserid,
+        ]);
+
+        if (get_config('block_panopto', 'async_tasks')) {
+            \core\task\manager::queue_adhoc_task($task);
+        } else {
+            $task->execute();
+        }
     }
 
     /**
@@ -388,7 +424,17 @@ class block_panopto_rollingsync {
             );
 
         if ($synconenrolment || $synchiddenrole) {
-            self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
+            $task = new \block_panopto\task\sync_user();
+            $task->set_custom_data([
+                'courseid' => $event->courseid,
+                'userid' => $event->relateduserid,
+            ]);
+
+            if (get_config('block_panopto', 'async_tasks')) {
+                \core\task\manager::queue_adhoc_task($task);
+            } else {
+                $task->execute();
+            }
         }
     }
 
@@ -413,7 +459,17 @@ class block_panopto_rollingsync {
             );
 
         if ($synconenrolment || $synchiddenrole) {
-            self::process_user_sync((int) $event->courseid, (int) $event->relateduserid);
+            $task = new \block_panopto\task\sync_user();
+            $task->set_custom_data([
+                'courseid' => $event->courseid,
+                'userid' => $event->relateduserid,
+            ]);
+
+            if (get_config('block_panopto', 'async_tasks')) {
+                \core\task\manager::queue_adhoc_task($task);
+            } else {
+                $task->execute();
+            }
         }
     }
 
@@ -487,25 +543,5 @@ class block_panopto_rollingsync {
 
         $visible = $DB->get_field('course', 'visible', ['id' => $courseid], IGNORE_MISSING);
         return $visible !== false && empty($visible);
-    }
-
-    /**
-     * Run or queue a per-user synchronisation using the existing async setting.
-     *
-     * @param int $courseid Moodle course ID used to select the Panopto server.
-     * @param int $userid Moodle user ID.
-     */
-    private static function process_user_sync(int $courseid, int $userid): void {
-        $task = new \block_panopto\task\sync_user();
-        $task->set_custom_data([
-            'courseid' => $courseid,
-            'userid' => $userid,
-        ]);
-
-        if (get_config('block_panopto', 'async_tasks')) {
-            \core\task\manager::queue_adhoc_task($task, true);
-        } else {
-            $task->execute();
-        }
     }
 }

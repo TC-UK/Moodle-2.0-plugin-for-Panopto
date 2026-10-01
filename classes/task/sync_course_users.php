@@ -53,47 +53,16 @@ class sync_course_users extends \core\task\adhoc_task {
     }
 
     /**
-     * Queue a participant sync after a course becomes visible.
-     *
-     * @param int $courseid Moodle course ID.
-     * @param int $afteruserid Last processed user ID, or zero for the first batch.
-     */
-    public static function queue_course_shown_sync(int $courseid, int $afteruserid = 0): void {
-        self::queue_course_sync($courseid, self::REASON_COURSE_SHOWN, $afteruserid);
-    }
-
-    /**
-     * Queue a participant sync after a course becomes hidden.
-     *
-     * @param int $courseid Moodle course ID.
-     * @param int $afteruserid Last processed user ID, or zero for the first batch.
-     */
-    public static function queue_course_hidden_sync(int $courseid, int $afteruserid = 0): void {
-        self::queue_course_sync($courseid, self::REASON_COURSE_HIDDEN, $afteruserid);
-    }
-
-    /**
-     * Queue reconciliation after the effective hidden-access policy changes.
-     *
-     * @param int $courseid Moodle course ID.
-     * @param int $afteruserid Last processed user ID, or zero for the first batch.
-     */
-    public static function queue_hidden_policy_refresh(int $courseid, int $afteruserid = 0): void {
-        self::queue_course_sync($courseid, self::REASON_HIDDEN_POLICY, $afteruserid);
-    }
-
-    /**
      * Queue the first or next participant batch while de-duplicating identical work.
      *
      * @param int $courseid Moodle course ID.
      * @param string $reason Reason represented by one of this class's REASON constants.
      * @param int $afteruserid Last processed user ID, or zero for the first batch.
      */
-    private static function queue_course_sync(int $courseid, string $reason, int $afteruserid): void {
+    public static function queue_course_sync(int $courseid, string $reason, int $afteruserid = 0): void {
         $task = new self();
         $task->set_custom_data([
             'courseid' => $courseid,
-            'targetvisible' => $reason === self::REASON_COURSE_SHOWN,
             'reason' => $reason,
             'afteruserid' => $afteruserid,
         ]);
@@ -104,47 +73,39 @@ class sync_course_users extends \core\task\adhoc_task {
      * Process the next keyset-paginated participant batch.
      */
     public function execute(): void {
-        $data = $this->normalise_custom_data();
-        if (!$this->task_is_applicable($data->courseid, $data->reason)) {
+        $data = (array) $this->get_custom_data();
+        $courseid = isset($data['courseid']) ? (int) $data['courseid'] : 0;
+        $reason = isset($data['reason']) ? (string) $data['reason'] : '';
+        $afteruserid = isset($data['afteruserid']) ? (int) $data['afteruserid'] : 0;
+        if (!$this->task_is_applicable($courseid, $reason)) {
             return;
         }
 
-        $coursepanopto = new \panopto_data($data->courseid);
+        $coursepanopto = new \panopto_data($courseid);
         if (!$coursepanopto->has_valid_panopto()) {
             return;
         }
 
-        $users = $this->get_participant_batch($data->courseid, $data->afteruserid);
+        $users = $this->get_participant_batch($courseid, $afteruserid);
         $hasmore = count($users) > self::BATCH_SIZE;
         if ($hasmore) {
             array_pop($users);
         }
 
-        $afteruserid = $this->sync_users($coursepanopto, $users, $data->afteruserid);
-        if ($hasmore && !empty($users)) {
-            self::queue_course_sync($data->courseid, $data->reason, $afteruserid);
+        foreach ($users as $user) {
+            \panopto_throttling::execute_with_throttling(
+                [$coursepanopto, 'sync_external_user'],
+                [(int) $user->id],
+                'usermanagement_sync',
+                'sync_course_visibility_user',
+                (int) $user->id
+            );
+            $afteruserid = (int) $user->id;
         }
-    }
 
-    /**
-     * Normalise and type the task custom data.
-     *
-     * @return \stdClass
-     */
-    private function normalise_custom_data(): \stdClass {
-        $rawdata = (array) $this->get_custom_data();
-        $reason = isset($rawdata['reason']) ? (string) $rawdata['reason'] : '';
-        if (!in_array($reason, self::get_reasons(), true)) {
-            // Preserve compatibility with tasks queued before explicit reasons were introduced.
-            $reason = !empty($rawdata['targetvisible'])
-                ? self::REASON_COURSE_SHOWN
-                : self::REASON_COURSE_HIDDEN;
+        if ($hasmore && !empty($users)) {
+            self::queue_course_sync($courseid, $reason, $afteruserid);
         }
-        return (object) [
-            'courseid' => isset($rawdata['courseid']) ? (int) $rawdata['courseid'] : 0,
-            'reason' => $reason,
-            'afteruserid' => isset($rawdata['afteruserid']) ? (int) $rawdata['afteruserid'] : 0,
-        ];
     }
 
     /**
@@ -157,7 +118,12 @@ class sync_course_users extends \core\task\adhoc_task {
     private function task_is_applicable(int $courseid, string $reason): bool {
         global $DB;
 
-        if ($courseid <= SITEID) {
+        $validreasons = [
+            self::REASON_COURSE_SHOWN,
+            self::REASON_COURSE_HIDDEN,
+            self::REASON_HIDDEN_POLICY,
+        ];
+        if ($courseid <= SITEID || !in_array($reason, $validreasons, true)) {
             return false;
         }
 
@@ -173,19 +139,6 @@ class sync_course_users extends \core\task\adhoc_task {
         $targetvisible = $reason === self::REASON_COURSE_SHOWN;
         return (bool) $visible === $targetvisible
             && course_visibility_policy::should_process_visibility_change($courseid, $targetvisible);
-    }
-
-    /**
-     * Return supported task reasons.
-     *
-     * @return string[]
-     */
-    private static function get_reasons(): array {
-        return [
-            self::REASON_COURSE_SHOWN,
-            self::REASON_COURSE_HIDDEN,
-            self::REASON_HIDDEN_POLICY,
-        ];
     }
 
     /**
@@ -208,28 +161,5 @@ class sync_course_users extends \core\task\adhoc_task {
                        AND u.id > :afteruserid
               ORDER BY u.id ASC";
         return $DB->get_records_sql($sql, $params, 0, self::BATCH_SIZE + 1);
-    }
-
-    /**
-     * Synchronise one page of users and return the last processed ID.
-     *
-     * @param \panopto_data $coursepanopto Provisioned course data.
-     * @param \stdClass[] $users User records containing an ID.
-     * @param int $afteruserid Previous last-processed user ID.
-     * @return int
-     */
-    private function sync_users(\panopto_data $coursepanopto, array $users, int $afteruserid): int {
-        foreach ($users as $user) {
-            \panopto_throttling::execute_with_throttling(
-                [$coursepanopto, 'sync_external_user'],
-                [(int) $user->id],
-                'usermanagement_sync',
-                'sync_course_visibility_user',
-                (int) $user->id
-            );
-            $afteruserid = (int) $user->id;
-        }
-
-        return $afteruserid;
     }
 }

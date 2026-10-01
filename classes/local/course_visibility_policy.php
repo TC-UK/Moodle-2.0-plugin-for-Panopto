@@ -16,8 +16,6 @@
 
 namespace block_panopto\local;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Resolves whether Moodle course visibility permits Panopto role synchronisation.
  *

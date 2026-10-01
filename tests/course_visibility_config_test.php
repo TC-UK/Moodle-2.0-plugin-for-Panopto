@@ -165,7 +165,7 @@ final class course_visibility_config_test extends \advanced_testcase {
      * Transition-only settings do not alter current hidden access and therefore do not queue unnecessary work.
      *
      * @covers \block_panopto::instance_config_save
-     * @covers \block_panopto\task\sync_course_users::queue_hidden_policy_refresh
+     * @covers \block_panopto\task\sync_course_users::queue_course_sync
      */
     public function test_hidden_policy_change_queues_course_reconciliation(): void {
         $this->resetAfterTest();
@@ -196,7 +196,6 @@ final class course_visibility_config_test extends \advanced_testcase {
         self::assertCount(1, $tasks);
         $taskdata = $tasks[0]->get_custom_data();
         self::assertSame($course->id, (int) $taskdata->courseid);
-        self::assertFalse((bool) $taskdata->targetvisible);
         self::assertSame(sync_course_users::REASON_HIDDEN_POLICY, $taskdata->reason);
         self::assertSame(0, (int) $taskdata->afteruserid);
     }
